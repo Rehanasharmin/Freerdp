@@ -1,7 +1,6 @@
-name: XFCE Desktop Access via VNC
+name: XFCE Desktop Access via ngrok and VNC
 
 on:
-  # Allows you to manually trigger the workflow from the GitHub Actions tab.
   workflow_dispatch:
 
 jobs:
@@ -12,39 +11,40 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Install dependencies
+      - name: Install dependencies and ngrok
         run: |
           sudo apt-get update
-          # Add dbus-x11 for dbus-launch, which is needed by xfce4-session
-          sudo apt-get install -y xfce4 xfce4-goodies x11vnc xvfb tmux dbus-x11
+          sudo apt-get install -y xfce4 xfce4-goodies x11vnc xvfb tmux dbus-x11 wget
+          
+          # Install ngrok
+          wget https://bin.equinox.io/c/4VmDzA7iaHb/ngrok-stable-linux-amd64.zip
+          sudo unzip ngrok-stable-linux-amd64.zip -d /usr/local/bin/
 
-      - name: Start VNC server
+      - name: Start VNC and ngrok tunnel
         env:
           VNC_PASSWORD: ${{ secrets.VNC_PASSWORD }}
+          NGROK_AUTHTOKEN: ${{ secrets.NGROK_AUTHTOKEN }}
         run: |
           # Start XFCE inside a virtual display on display :99
           Xvfb :99 -screen 0 1024x768x24 &
           export DISPLAY=:99
           
-          # Use a different command to set the VNC password non-interactively
+          # Set the VNC password non-interactively
           mkdir -p ~/.vnc
           x11vnc -storepasswd "$VNC_PASSWORD" ~/.vnc/passwd
           
-          # Start xfce4 in the virtual display
-          xfce4-session &
-          
-          # Start the VNC server in the background using tmux
+          # Start the VNC server in the background
           tmux new-session -d -s vnc_session 'x11vnc -display :99 -forever -rfbauth ~/.vnc/passwd -rfbport 5900'
           
-          # Wait for VNC to start and display connection details
-          sleep 5
-          echo "VNC Server is running on port 5900."
-
-      - name: Display VNC details (for debugging)
-        run: |
-          echo "Connect to the VNC server to view the XFCE desktop."
-          echo "Note: The runner IP is temporary and only accessible during the workflow run."
-
-      # This step holds the job open for a specified duration, allowing time for VNC connection.
-      - name: Keep job alive for remote access
-        run: sleep 3600 # Wait for 1 hour for remote access
+          # Authenticate ngrok and start the tunnel
+          ngrok authtoken "$NGROK_AUTHTOKEN"
+          nohup ngrok tcp 5900 > ngrok.log &
+          
+          # Wait for ngrok tunnel to become active and get the public URL
+          sleep 10
+          NGROK_URL=$(curl --silent http://127.0.0.1:4040/api/tunnels | jq -r '.tunnels[0].public_url')
+          echo "VNC Tunnel is active! Connect via VNC client to:"
+          echo ":: $NGROK_URL ::"
+          
+          # Keep the job alive for remote access
+          sleep 3600
