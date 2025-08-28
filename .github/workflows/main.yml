@@ -15,20 +15,27 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y xfce4 xfce4-goodies x11vnc xvfb tmux
+          # Add dbus-x11 for dbus-launch, which is needed by xfce4-session
+          sudo apt-get install -y xfce4 xfce4-goodies x11vnc xvfb tmux dbus-x11
 
       - name: Start VNC server
         env:
           VNC_PASSWORD: ${{ secrets.VNC_PASSWORD }}
         run: |
-          # Start XFCE inside a virtual display
-          /usr/bin/Xvfb :99 -screen 0 1024x768x24 &
+          # Start XFCE inside a virtual display on display :99
+          Xvfb :99 -screen 0 1024x768x24 &
+          export DISPLAY=:99
+          
+          # Use a different command to set the VNC password non-interactively
+          mkdir -p ~/.vnc
+          x11vnc -storepasswd "$VNC_PASSWORD" ~/.vnc/passwd
+          
           # Start xfce4 in the virtual display
           xfce4-session &
-          # Set the VNC password from the GitHub Secret
-          echo "$VNC_PASSWORD" | x11vnc -storepasswd ~/.vnc_password
+          
           # Start the VNC server in the background using tmux
-          tmux new-session -d -s vnc_session 'x11vnc -display :99 -nopw -rfbauth ~/.vnc_password'
+          tmux new-session -d -s vnc_session 'x11vnc -display :99 -forever -rfbauth ~/.vnc/passwd -rfbport 5900'
+          
           # Wait for VNC to start and display connection details
           sleep 5
           echo "VNC Server is running on port 5900."
@@ -41,4 +48,3 @@ jobs:
       # This step holds the job open for a specified duration, allowing time for VNC connection.
       - name: Keep job alive for remote access
         run: sleep 3600 # Wait for 1 hour for remote access
-        
