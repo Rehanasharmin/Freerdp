@@ -15,7 +15,6 @@ jobs:
       - name: Install dependencies and ngrok
         run: |
           sudo apt-get update
-          # jq is needed to parse the ngrok API output
           sudo apt-get install -y xfce4 xfce4-goodies x11vnc xvfb tmux dbus-x11 jq wget
           
           # Install ngrok
@@ -48,17 +47,20 @@ jobs:
           nohup ngrok tcp 5900 > ngrok.log &
           
           # Wait for ngrok tunnel to become active and get the public URL
-          sleep 10
-          NGROK_URL=$(curl --silent http://127.0.0.1:4040/api/tunnels | jq -r '.tunnels[] | select(.proto=="tcp") | .public_url')
+          for i in $(seq 1 10); do
+            NGROK_URL=$(curl --silent http://127.0.0.1:4040/api/tunnels | jq -r '.tunnels[] | select(.proto=="tcp") | .public_url')
+            if [ -n "$NGROK_URL" ]; then
+              echo "VNC Tunnel is active! Connect via VNC client to:"
+              echo ":: $NGROK_URL ::"
+              break
+            fi
+            sleep 5
+          done
           
           if [ -z "$NGROK_URL" ]; then
-            echo "Failed to get ngrok URL."
+            echo "Failed to get ngrok URL after multiple retries."
             exit 1
           fi
           
-          echo "VNC Tunnel is active! Connect via VNC client to:"
-          echo ":: $NGROK_URL ::"
-          
           # Keep the job alive for remote access
           sleep 3600
-
