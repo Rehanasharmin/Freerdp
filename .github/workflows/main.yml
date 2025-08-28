@@ -1,6 +1,7 @@
 name: XFCE Desktop Access via ngrok and VNC
 
 on:
+  # Allows you to manually trigger the workflow from the GitHub Actions tab.
   workflow_dispatch:
 
 jobs:
@@ -14,7 +15,8 @@ jobs:
       - name: Install dependencies and ngrok
         run: |
           sudo apt-get update
-          sudo apt-get install -y xfce4 xfce4-goodies x11vnc xvfb tmux dbus-x11 wget
+          # jq is needed to parse the ngrok API output
+          sudo apt-get install -y xfce4 xfce4-goodies x11vnc xvfb tmux dbus-x11 jq wget
           
           # Install ngrok
           wget https://bin.equinox.io/c/4VmDzA7iaHb/ngrok-stable-linux-amd64.zip
@@ -33,18 +35,30 @@ jobs:
           mkdir -p ~/.vnc
           x11vnc -storepasswd "$VNC_PASSWORD" ~/.vnc/passwd
           
-          # Start the VNC server in the background
-          tmux new-session -d -s vnc_session 'x11vnc -display :99 -forever -rfbauth ~/.vnc/passwd -rfbport 5900'
+          # Start xfce4 in the virtual display
+          xfce4-session &
           
-          # Authenticate ngrok and start the tunnel
+          # Start the VNC server in the background
+          tmux new-session -d -s vnc_session 'x11vnc -display :99 -forever -rfbauth ~/.vnc/passwd -rfbport 5900 -xkb'
+          
+          # Authenticate ngrok
           ngrok authtoken "$NGROK_AUTHTOKEN"
+          
+          # Start the ngrok tunnel in the background
           nohup ngrok tcp 5900 > ngrok.log &
           
           # Wait for ngrok tunnel to become active and get the public URL
           sleep 10
-          NGROK_URL=$(curl --silent http://127.0.0.1:4040/api/tunnels | jq -r '.tunnels[0].public_url')
+          NGROK_URL=$(curl --silent http://127.0.0.1:4040/api/tunnels | jq -r '.tunnels[] | select(.proto=="tcp") | .public_url')
+          
+          if [ -z "$NGROK_URL" ]; then
+            echo "Failed to get ngrok URL."
+            exit 1
+          fi
+          
           echo "VNC Tunnel is active! Connect via VNC client to:"
           echo ":: $NGROK_URL ::"
           
           # Keep the job alive for remote access
           sleep 3600
+
