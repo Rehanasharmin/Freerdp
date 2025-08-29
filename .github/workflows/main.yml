@@ -1,50 +1,59 @@
-name: XFCE Desktop Access via Pinggy and VNC
+name: Deploy Seedream 3.0 Web UI
 
 on:
+  push:
+    branches:
+      - main
   workflow_dispatch:
 
 jobs:
-  build:
+  deploy:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Install dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y xfce4 xfce4-goodies x11vnc xvfb tmux
-          # Pinggy requires no installation, just the `ssh` client
-      
-      - name: Start VNC and Pinggy tunnel
-        env:
-          VNC_PASSWORD: ${{ secrets.VNC_PASSWORD }}
-        run: |
-          # Start XFCE inside a virtual display on display :99
-          Xvfb :99 -screen 0 1024x768x24 &
-          export DISPLAY=:99
-          
-          # Set the VNC password non-interactively
-          mkdir -p ~/.vnc
-          x11vnc -storepasswd "$VNC_PASSWORD" ~/.vnc/passwd
-          
-          # Start xfce4 in the virtual display
-          xfce4-session &
-          
-          # Start the VNC server in the background
-          tmux new-session -d -s vnc_session 'x11vnc -display :99 -forever -rfbauth ~/.vnc/passwd -rfbport 5900 -xkb'
+      # Step 1: Checkout repository
+      - name: Checkout repo
+        uses: actions/checkout@v3
 
-          # Start the Pinggy TCP tunnel and capture the output
-          PINGGY_OUTPUT=$(ssh -p 443 -R 0:localhost:5900 a.pinggy.io -N &> pinggy.log & sleep 5 && cat pinggy.log)
-          
-          # Extract the tunnel URL from the output (Pinggy prints it to stderr)
-          PINGGY_URL=$(echo "$PINGGY_OUTPUT" | grep -o 'tcp://[^[:space:]]*')
-          
-          if [ -z "$PINGGY_URL" ]; then
-            echo "Failed to get Pinggy URL after retries."
-            exit 1
-          fi
+      # Step 2: Update system & install dependencies
+      - name: Install system packages
+        run: |
+          sudo apt update && sudo apt upgrade -y
+          sudo apt install -y python3-pip python3-venv git wget ffmpeg
 
-          echo "VNC Tunnel is active! Connect via VNC client to:"
-          echo ":: $PINGGY_URL ::"
-          
-          # Keep the job alive for remote access
-          sleep 3600
+      # Step 3: Setup Python environment
+      - name: Setup Python
+        run: |
+          python3 -m venv seedream_env
+          source seedream_env/bin/activate
+          pip install --upgrade pip
+
+      # Step 4: Install PyTorch (CPU version)
+      - name: Install PyTorch CPU
+        run: |
+          source seedream_env/bin/activate
+          pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
+
+      # Step 5: Install Seedream dependencies
+      - name: Install Python dependencies
+        run: |
+          source seedream_env/bin/activate
+          pip install -r requirements.txt
+          pip install fastapi uvicorn jinja2 python-multipart pillow
+
+      # Step 6: Ensure models folder exists (user must place weights manually)
+      - name: Prepare models folder
+        run: |
+          mkdir -p models
+          echo "Please place Seedream 3.0 weights in the models/ folder."
+
+      # Step 7: Ensure static folder exists
+      - name: Create static folder
+        run: mkdir -p static
+
+      # Step 8: Run the FastAPI server (for testing; usually in VPS you use systemd)
+      - name: Start Web UI server (test run)
+        run: |
+          source seedream_env/bin/activate
+          nohup uvicorn app:app --host 0.0.0.0 --port 8000 &
+          echo "Server started on port 8000"
