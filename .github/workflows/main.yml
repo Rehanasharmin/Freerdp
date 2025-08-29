@@ -1,17 +1,17 @@
-name: Start Chrome Remote Desktop
+name: Chrome Remote Desktop with XFCE
 
 on:
   workflow_dispatch:
     inputs:
       oauth_code:
-        description: 'Enter your one-time OAuth code from https://remotedesktop.google.com/headless'
+        description: 'Paste a fresh OAuth code from https://remotedesktop.google.com/headless AFTER setup finishes'
         required: true
         default: ''
 
 jobs:
-  start-crd:
+  setup-crd:
     runs-on: ubuntu-latest
-    timeout-minutes: 360  # 6 hours max
+    timeout-minutes: 360
 
     steps:
     - name: Install dependencies
@@ -33,14 +33,14 @@ jobs:
       run: |
         echo "exec /usr/bin/startxfce4" > ~/.chrome-remote-desktop-session
 
-    - name: Set Chrome Remote Desktop PIN
+    - name: Setup PIN
       run: |
         mkdir -p ~/.chrome-remote-desktop
         echo "123456" > ~/.chrome-remote-desktop/pin.txt
         chmod 600 ~/.chrome-remote-desktop/pin.txt
-        export CHROME_REMOTE_DESKTOP_PIN=123456
 
-    - name: Start Chrome Remote Desktop host
+    - name: Start Chrome Remote Desktop (needs fresh OAuth code)
+      if: ${{ github.event.inputs.oauth_code != '' }}
       run: |
         export DISPLAY=:0
         /opt/google/chrome-remote-desktop/start-host \
@@ -49,9 +49,8 @@ jobs:
           --name=$(hostname) \
           --pin=123456 &
 
-    - name: Keep workflow alive for 6 hours
-      run: |
-        echo "Keeping workflow alive for 6 hours..."
+        echo "Chrome Remote Desktop started successfully!"
+        echo "Keeping runner alive for 6 hours..."
         for i in {1..360}; do
           sleep 60
           echo "Minute $i/360..."
