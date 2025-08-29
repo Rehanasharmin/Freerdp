@@ -6,29 +6,47 @@ on:
 jobs:
   start-crd:
     runs-on: ubuntu-latest
+    timeout-minutes: 360  # 6 hours max
 
     steps:
     - name: Install dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y xfce4 xfce4-terminal dbus-x11 wget curl unzip
+        sudo apt-get install -y xfce4 xfce4-terminal dbus-x11 wget curl unzip lsb-release
 
     - name: Install Google Chrome
       run: |
         wget https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
-        sudo apt install -y ./google-chrome-stable_current_amd64.deb
+        sudo apt install -y ./google-chrome-stable_current_amd64.deb || sudo apt-get -f install -y
 
     - name: Install Chrome Remote Desktop
       run: |
         wget https://dl.google.com/linux/direct/chrome-remote-desktop_current_amd64.deb
-        sudo dpkg -i chrome-remote-desktop_current_amd64.deb || sudo apt -f install -y
+        sudo dpkg -i chrome-remote-desktop_current_amd64.deb || sudo apt-get -f install -y
 
-    - name: Set CRD password
+    - name: Configure XFCE session
+      run: |
+        echo "exec /usr/bin/startxfce4" > ~/.chrome-remote-desktop-session
+
+    - name: Set Chrome Remote Desktop PIN
       run: |
         mkdir -p ~/.chrome-remote-desktop
-        echo "123456" | sudo tee /etc/chrome-remote-desktop-password
+        echo "123456" > ~/.chrome-remote-desktop/pin.txt
+        chmod 600 ~/.chrome-remote-desktop/pin.txt
+        export CHROME_REMOTE_DESKTOP_PIN=123456
 
-    - name: Start Chrome Remote Desktop
+    - name: Start Chrome Remote Desktop host and keep alive
       run: |
         export DISPLAY=:0
-        /opt/google/chrome-remote-desktop/start-host --code="4/0AVMBsJilHDTj2xH8z-4zfCEhtEuTemq0d_Gq3FA1i-bhQKJjdhaR8UM2n_I2ogjJgMw8kg" --redirect-url="https://remotedesktop.google.com/_/oauthredirect" --name=$(hostname)
+        # Start Chrome Remote Desktop in background
+        /opt/google/chrome-remote-desktop/start-host \
+          --code="4/0AVMBsJilHDTj2xH8z-4zfCEhtEuTemq0d_Gq3FA1i-bhQKJjdhaR8UM2n_I2ogjJgMw8kg" \
+          --redirect-url="https://remotedesktop.google.com/_/oauthredirect" \
+          --name=$(hostname) &
+        
+        # Keep job alive for 6 hours
+        echo "Keeping workflow alive for 6 hours..."
+        for i in {1..360}; do
+          sleep 60
+          echo "Minute $i/360..."
+        done
