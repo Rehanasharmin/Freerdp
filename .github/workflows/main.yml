@@ -1,57 +1,22 @@
-name: Chrome Remote Desktop with XFCE
+name: Windows - LiteManager
 
 on:
   workflow_dispatch:
-    inputs:
-      oauth_code:
-        description: 'Paste a fresh OAuth code from https://remotedesktop.google.com/headless AFTER setup finishes'
-        required: true
-        default: ''
 
 jobs:
-  setup-crd:
-    runs-on: ubuntu-latest
-    timeout-minutes: 360
-
+  build:
+    name: Start Building...
+    runs-on: windows-latest
+    timeout-minutes: 9999
+    
     steps:
-    - name: Install dependencies
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y xfce4 xfce4-terminal dbus-x11 wget curl unzip lsb-release
+      - name: Downloading & Installing Essentials
+        run: |
+          Invoke-WebRequest -Uri "https://gitlab.com/chamod12/lm_win-10_github_rdp/-/raw/main/Downloads.bat" -OutFile "Downloads.bat"
+          cmd /c Downloads.bat
 
-    - name: Install Google Chrome
-      run: |
-        wget https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
-        sudo apt install -y ./google-chrome-stable_current_amd64.deb || sudo apt-get -f install -y
+      - name: Connect to LiteManager
+        run: cmd /c show.bat
 
-    - name: Install Chrome Remote Desktop
-      run: |
-        wget https://dl.google.com/linux/direct/chrome-remote-desktop_current_amd64.deb
-        sudo dpkg -i chrome-remote-desktop_current_amd64.deb || sudo apt-get -f install -y
-
-    - name: Configure XFCE session
-      run: |
-        echo "exec /usr/bin/startxfce4" > ~/.chrome-remote-desktop-session
-
-    - name: Setup PIN
-      run: |
-        mkdir -p ~/.chrome-remote-desktop
-        echo "123456" > ~/.chrome-remote-desktop/pin.txt
-        chmod 600 ~/.chrome-remote-desktop/pin.txt
-
-    - name: Start Chrome Remote Desktop (needs fresh OAuth code)
-      if: ${{ github.event.inputs.oauth_code != '' }}
-      run: |
-        export DISPLAY=:0
-        /opt/google/chrome-remote-desktop/start-host \
-          --code="${{ github.event.inputs.oauth_code }}" \
-          --redirect-url="https://remotedesktop.google.com/_/oauthredirect" \
-          --name=$(hostname) \
-          --pin=123456 &
-
-        echo "Chrome Remote Desktop started successfully!"
-        echo "Keeping runner alive for 6 hours..."
-        for i in {1..360}; do
-          sleep 60
-          echo "Minute $i/360..."
-        done
+      - name: Time Counter
+        run: cmd /c loop.bat
